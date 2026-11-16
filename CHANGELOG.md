@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.0 - 2026-11-17
+
+- Members after `$` and `@` (data frame columns, list elements, S4 slots) are offered when the
+  list is opened by hand or while typing the member name. vscode-R offers them only at the moment
+  `$` / `@` is typed; opening the list again showed the global environment instead.
+- Fixed: accepting a folder continued with its content only at the first level. From the second
+  level on `/` was not typed and the list did not reopen ("Actual command not found" in the
+  extension host log).
+
 ## 1.0.0 - 2026-11-16
 
 - Arguments of functions that exist only in the R session are offered at the top of the

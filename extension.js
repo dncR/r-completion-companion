@@ -1,10 +1,14 @@
 // R Completion Companion
 //
-// Adds two completion providers without touching vscode-R:
+// Adds three completion providers without touching vscode-R:
 //  1. Arguments of functions that exist only in the R session (e.g. loaded with source()).
 //     Source: vscode-R's session signature help (vscode.executeSignatureHelpProvider). When the
 //     signature comes from languageserver, it already offers the arguments, so nothing is added.
 //  2. Folders and files inside string literals (folders first).
+//  3. Members after "$" / "@" (data frame columns, list elements, S4 slots) when completion is
+//     invoked by hand or by typing a name. vscode-R offers them only at the moment "$" / "@" is
+//     typed; once that list is gone (closed, or missed because the next letter came before R
+//     answered) it falls back to the global environment.
 //
 // Why: vscode-R's session items (detail "[session]") carry no sortText, so VS Code falls back to
 // the label as the sort key and they get mixed with items from other providers. Items created
@@ -20,8 +24,13 @@ const os = require('os');
 const path = require('path');
 
 const SESSION_SIGNATURE = 'Function in this R session'; // documentation of vscode-R's session signature
+const SESSION_DETAIL = '[session]'; // detail of vscode-R's session completion items
+const CONTINUE_PATH = 'rCompletionCompanion.continuePath';
 const TOP = '!';
 const NAME = /^(\.\.\.|[\p{L}._][\p{L}\p{N}._]*)/u;
+// "$" or "@" followed by the part of the member name typed so far, right before the cursor
+const MEMBER = /([$@])((?:[\p{L}.][\p{L}\p{N}._]*)?)$/u;
+const isMemberTrigger = (context) => context?.triggerCharacter === '$' || context?.triggerCharacter === '@';
 
 const isVirtualDocument = (document) => path.basename(document.uri.fsPath).startsWith('.vdoc.');
 
@@ -65,9 +74,10 @@ function stringPrefix(document, position) {
   return isCode ? stringPrefixInCode(linePrefix) : stringPrefixInText(linePrefix);
 }
 
-async function provideSessionArguments(document, position) {
+async function provideSessionArguments(document, position, token, context) {
+  if (isMemberTrigger(context)) return [];
   const linePrefix = document.lineAt(position.line).text.slice(0, position.character);
-  if (stringPrefixInCode(linePrefix) !== null) return [];
+  if (stringPrefixInCode(linePrefix) !== null || MEMBER.test(linePrefix)) return [];
   let help;
   try {
     help = await vscode.commands.executeCommand('vscode.executeSignatureHelpProvider', document.uri, position);
@@ -87,6 +97,37 @@ async function provideSessionArguments(document, position) {
       item.detail = 'parameter [session]';
       item.sortText = `${TOP}0-${String(i + 1).padStart(3, '0')}`;
       item.insertText = name === '...' ? '...' : `${name} = `;
+      return item;
+    });
+}
+
+// vscode-R answers "$" / "@" only when the request carries that trigger character. For every
+// other request the same question is asked on its behalf (at the position right after the
+// operator) and its session items are offered again, on top and in their original order.
+async function provideMembers(document, position, token, context) {
+  if (isMemberTrigger(context)) return []; // vscode-R answers these itself; also ends the nested request below
+  const linePrefix = document.lineAt(position.line).text.slice(0, position.character);
+  if (stringPrefixInCode(linePrefix) !== null) return [];
+  const match = MEMBER.exec(linePrefix);
+  if (!match) return [];
+  const afterOperator = position.translate(0, -match[2].length);
+  let list;
+  try {
+    list = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', document.uri, afterOperator, match[1]);
+  } catch { return []; }
+  if (token?.isCancellationRequested) return [];
+  const range = new vscode.Range(afterOperator, position);
+  return (list?.items ?? [])
+    .filter((source) => source.detail === SESSION_DETAIL)
+    .map((source, i) => {
+      const label = typeof source.label === 'string' ? source.label : source.label.label;
+      const item = new vscode.CompletionItem(label, source.kind);
+      item.detail = source.detail;
+      item.documentation = source.documentation;
+      item.insertText = typeof source.insertText === 'string' ? source.insertText : label;
+      item.filterText = label;
+      item.range = range;
+      item.sortText = `${TOP}${source.sortText ?? String(i).padStart(5, '0')}`;
       return item;
     });
 }
@@ -119,7 +160,7 @@ function providePaths(document, position) {
       item.sortText = `${TOP}${isDir ? 'd' : 'f'}${e.name.toLowerCase()}`;
       // Accepting a folder types "/": only providers triggered by "/" (this one) respond, so the
       // list continues with the folder's content and nothing else gets mixed in.
-      if (isDir) item.command = { command: 'default:type', title: '', arguments: [{ text: '/' }] };
+      if (isDir) item.command = { command: CONTINUE_PATH, title: '' };
       return item;
     });
 }
@@ -128,7 +169,18 @@ exports.activate = function (context) {
   const code = [{ language: 'r' }, { language: 'rmd' }];
   const documents = [...code, { language: 'quarto' }];
   context.subscriptions.push(
+    // Types "/" after a folder was accepted. Up to 1.0.0 the folder items carried
+    // `default:type` with its argument directly. VS Code keeps a command that has arguments in
+    // a cache that belongs to the completion list and releases the lists once the accepted
+    // item's command has finished. The "/" typed by that command opened the next list while
+    // the command was still running, so that list was released as well and its folders failed
+    // with "Actual command not found": only the first folder level continued. This command
+    // has no arguments (nothing to cache) and types "/" after it has returned.
+    vscode.commands.registerCommand(CONTINUE_PATH, () => {
+      setTimeout(() => vscode.commands.executeCommand('default:type', { text: '/' }), 0);
+    }),
     vscode.languages.registerCompletionItemProvider(code, { provideCompletionItems: provideSessionArguments }),
+    vscode.languages.registerCompletionItemProvider(code, { provideCompletionItems: provideMembers }),
     vscode.languages.registerCompletionItemProvider(documents, { provideCompletionItems: providePaths }, '/'),
   );
 };

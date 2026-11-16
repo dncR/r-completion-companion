@@ -1,3 +1,6 @@
 *.vsix
 node_modules/
 .DS_Store
+
+# Folders
+vsix

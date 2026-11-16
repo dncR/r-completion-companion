@@ -4,7 +4,7 @@
 
 A small VS Code extension that fixes the order of the completion list in R, R Markdown and
 Quarto documents when you work with [vscode-R](https://github.com/REditorSupport/vscode-R) and
-an attached R session. It does not modify vscode-R, languageserver or Quarto; it only adds two
+an attached R session. It does not modify vscode-R, languageserver or Quarto; it only adds three
 completion providers.
 
 ## What it does
@@ -41,7 +41,24 @@ readRDS("|")
 Relative paths resolve against the workspace root. Accepting a folder types `/` and the list
 continues with that folder's content. Hidden entries show up after typing `.`.
 
-Both features work in `.R` files and inside R chunks of `.Rmd` and `.qmd` documents.
+**3. Members after `$` are offered whenever the list is opened.** vscode-R lists the columns of
+a data frame (list elements, S4 slots after `@`) only at the moment `$` is typed. When the list
+is opened again, by hand or by typing on, it shows the global environment instead. The extension
+asks vscode-R for the members in these cases too and puts them on top, in their original order.
+
+```r
+df$|        # list closed with Esc, then reopened
+```
+
+| | Completion list at `\|` |
+|---|---|
+| Before | `df`, `init_variable_info`, … (global environment) |
+| After | `id`, `age`, `group`, … (columns of `df`), then the global environment |
+
+Nothing is added at the moment `$` is typed; that list still comes from vscode-R, so members are
+not listed twice.
+
+All three features work in `.R` files and inside R chunks of `.Rmd` and `.qmd` documents.
 
 ## Why it is needed
 
@@ -75,7 +92,7 @@ The extension is not on the Marketplace. Download the `.vsix` from the
 git clone https://github.com/dncR/r-completion-companion.git
 cd r-completion-companion
 npx @vscode/vsce package
-code --install-extension r-completion-companion-1.0.0.vsix
+code --install-extension r-completion-companion-1.1.0.vsix
 ```
 
 Reload the VS Code window afterwards.
@@ -129,6 +146,11 @@ extension as well, since the path extension is turned off for these languages.
 - The order applies when the list is opened without a typed prefix. While typing, VS Code ranks
   by match score first and uses the sort key only for ties.
 - The path provider is intentionally simple. It has no path mappings or aliases.
+- The member feature repeats what vscode-R answers for `$` / `@` and recognises its items by
+  their detail text (`[session]`). It needs an attached session, and it cannot help when the
+  expression before `$` is one vscode-R does not evaluate (for example `x[[1]]$`). When a part of
+  the member name is already typed, languageserver may list that typed word itself above the
+  members.
 - The argument feature depends on two implementation details: the documentation string of
   vscode-R's session signature (`Function in this R session`) and the `.vdoc.` prefix of
   Quarto's virtual documents. If a future release changes them, the feature stops working

@@ -1,9 +1,9 @@
 {
   "name": "r-completion-companion",
   "displayName": "R Completion Companion",
-  "description": "Puts session-function arguments and file paths at the top of the completion list in R, R Markdown and Quarto documents.",
+  "description": "Puts session-function arguments, file paths and members after $ at the top of the completion list in R, R Markdown and Quarto documents.",
   "publisher": "local",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/dncR/r-completion-companion.git" },
   "bugs": { "url": "https://github.com/dncR/r-completion-companion/issues" },

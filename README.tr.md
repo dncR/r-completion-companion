@@ -4,7 +4,7 @@
 
 [vscode-R](https://github.com/REditorSupport/vscode-R) ve bağlı bir R oturumuyla çalışırken R,
 R Markdown ve Quarto belgelerinde tamamlama listesinin sırasını düzelten küçük bir VS Code
-eklentisi. vscode-R, languageserver ve Quarto eklentilerine dokunmaz; yalnızca iki tamamlama
+eklentisi. vscode-R, languageserver ve Quarto eklentilerine dokunmaz; yalnızca üç tamamlama
 sağlayıcısı ekler.
 
 ## Ne yapar
@@ -41,7 +41,24 @@ readRDS("|")
 Göreli yollar çalışma alanı köküne göre çözülür. Klasör seçilince `/` yazılır ve liste o klasörün
 içeriğiyle sürer. Gizli öğeler `.` yazınca görünür.
 
-İki özellik de `.R` dosyalarında ve `.Rmd` ile `.qmd` belgelerindeki R hücrelerinde çalışır.
+**3. `$` sonrasındaki üyeler liste her açıldığında önerilir.** vscode-R bir veri çerçevesinin
+sütunlarını (liste öğelerini, `@` sonrasında S4 slotlarını) yalnızca `$` yazıldığı anda listeler.
+Liste sonradan elle ya da yazmaya devam edilerek açıldığında global ortamı gösterir. Eklenti bu
+durumlarda da üyeleri vscode-R'dan ister ve özgün sıralarıyla en üste koyar.
+
+```r
+df$|        # liste Esc ile kapatıldı, sonra yeniden açıldı
+```
+
+| | `\|` konumundaki tamamlama listesi |
+|---|---|
+| Önce | `df`, `init_variable_info`, … (global ortam) |
+| Sonra | `id`, `yas`, `grup`, … (`df` sütunları), ardından global ortam |
+
+`$` yazıldığı anda hiçbir şey eklenmez; o liste yine vscode-R'dan gelir ve üyeler iki kez
+listelenmez.
+
+Üç özellik de `.R` dosyalarında ve `.Rmd` ile `.qmd` belgelerindeki R hücrelerinde çalışır.
 
 ## Neden gerekli
 
@@ -76,7 +93,7 @@ kendiniz derleyin:
 git clone https://github.com/dncR/r-completion-companion.git
 cd r-completion-companion
 npx @vscode/vsce package
-code --install-extension r-completion-companion-1.0.0.vsix
+code --install-extension r-completion-companion-1.1.0.vsix
 ```
 
 Ardından VS Code penceresini yeniden yükleyin.
@@ -129,6 +146,10 @@ gelir, çünkü yol eklentisi bu dillerde kapatılmıştır.
 - Sıra, liste yazılmış bir önek olmadan açıldığında geçerlidir. Yazarken VS Code önce eşleşme
   puanına bakar; sıralama anahtarını yalnızca eşitliklerde kullanır.
 - Yol sağlayıcısı bilerek yalın tutulmuştur; yol eşleme ya da takma ad desteği yoktur.
+- Üye özelliği, vscode-R'ın `$` / `@` için verdiği yanıtı yineler ve öğelerini ayrıntı metninden
+  (`[session]`) tanır. Bağlı bir oturum gerekir; `$` öncesindeki ifade vscode-R'ın
+  değerlendirmediği türdense (örneğin `x[[1]]$`) bir şey eklenmez. Üye adının bir bölümü
+  yazılmışsa languageserver yazılan sözcüğün kendisini üyelerin üstünde listeleyebilir.
 - Argüman özelliği iki uygulama ayrıntısına dayanır: vscode-R'ın oturum imzasındaki açıklama
   metni (`Function in this R session`) ve Quarto sanal belgelerinin `.vdoc.` öneki. İleriki bir
   sürüm bunları değiştirirse eklenti güncellenene kadar özellik çalışmaz.
